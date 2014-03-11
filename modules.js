@@ -1,57 +1,52 @@
 define(["gamejs"], function(gamejs) {
-	var gravity = 2200;
-	var terminalVelocity = 10 * gravity;
+	var gravity = 1;
+	var terminalV = 600; //pixels/second
 	var stageHeight = 600;
 	var stageWidth = 800;
 
-	// Handles applying gravity to objects, and lets them jump
+	// Handles applying gravity to objects
 	function GravityModule (target) {
 		this.target = target; // Careful about potential circular ref
-		this.jumpCharge = 0;
-		this.maxJump = 1200;
-		this.chargeRate = 800;
-		this.charging = false;
-		this.inAir = false;
-		this.slowId = undefined;
 		
 		return this;
 
 	}
 
 	GravityModule.prototype.update = function (ms) {
-		this.target.rect.moveIp([0, this.target.vel[1] * ms / 1000]);
-
-		if (this.target.radius) { // Dis not rectangle
-			this.inAir = (this.target.rect.top + this.target.radius !== stageHeight);
+		if (this.target.vel[1] < terminalV) {
+			this.target.vel[1] += gravity * this.target.mass * ms / 1000; // Hacked to make heavier objects fall faster
 		} else {
-			this.inAir = (this.target.rect.bottom !== stageHeight);
+			this.target.vel[1] = terminalV;
 		}
 
-		if (this.charging) {
-			var chargeMod = this.inAir ? 10 : 1; // Helps double/triple jumping. Needs tweaking
-			this.jumpCharge = Math.min(this.maxJump, this.jumpCharge + this.chargeRate * chargeMod * ms / 1000);
-		}
-
-		if (this.inAir) {
-			this.target.vel[1] += gravity * ms / 1000;
-			if (this.target.radius) { // Dis not rectangle
-				if (this.target.radius + this.target.rect.top > stageHeight) {
-					this.target.rect.top = stageHeight - this.target.radius;
-					this.inAir = false;
-					this.target.vel[1] = 0;
-				}
-			}
-			else // Dis a rectangle
-			{
-				if (this.target.rect.bottom > stageHeight) {
-					this.target.rect.bottom = stageHeight;
-					this.inAir = false;
-					this.target.vel[1] = 0;
-				}
-			}
+		if (this.target.rect.top > stageHeight * 2) {
+			this.target.rect.top = stageHeight; // Bring it back into range, kinda
 		}
 	}
-	GravityModule.prototype.handle = function (event) {
+
+	function JumpModule(target) {
+  		JumpModule.superConstructor.apply(this, arguments);
+		this.jumpCharge = 0;
+		this.maxJump = 850;
+		this.chargeRate = 1000;
+		this.charging = false;
+		this.slowId = undefined;
+
+		return this;
+	}
+	gamejs.utils.objects.extend(JumpModule, GravityModule);
+
+	// Returns false if target has a disable
+	JumpModule.prototype.canJump = function() {
+		var mods = this.target.modifiers;
+		if(mods && mods.jump) {
+			return mods.jump.length > 0;
+		} else {
+			return true;
+		}
+	};
+
+	JumpModule.prototype.handle = function (event) {
 		if (event.command !== "jump") {
 			console.warn("Jump module - handle() expects event.command 'jump'");
 			return;
@@ -67,7 +62,7 @@ define(["gamejs"], function(gamejs) {
 			}
 			break;
 		case gamejs.event.KEY_UP:
-			console.log("Jumping: " + this.jumpCharge)
+			console.log("Jumping: " + this.jumpCharge);
 			this.target.vel[1] -= this.jumpCharge; // Negative velocity is 'up'
 			this.jumpCharge = 0;
 			this.charging = false;
@@ -77,19 +72,17 @@ define(["gamejs"], function(gamejs) {
 		default:
 			console.warn("Incorrect event: ", event);
 		}
-	}
+	};
 
-	// Returns false if target has a disable
-	GravityModule.prototype.canJump = function() {
-		var mods = this.target.modifiers;
-		if(mods && mods.jump) {
-			return mods.jump.length > 0;
-		} else {
-			return true;
+	JumpModule.prototype.update = function(ms) {
+		JumpModule.superClass.update.apply(this, arguments);
+		if (this.charging && this.jumpCharge < this.maxJump) {
+			this.jumpCharge += this.chargeRate * ms / 1000;
 		}
 	};
 	return {
 		GravityModule: GravityModule,
+		JumpModule: JumpModule,
 		gravity: gravity,
 		stageHeight: stageHeight,
 		stageWidth: stageWidth

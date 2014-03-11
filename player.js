@@ -1,17 +1,20 @@
-define(["gamejs", "modules"], function(gamejs, _modules){
-	var acceleration = 550,
-		friction = 250,
+define(["gamejs", "modules", "lib/utils"], function(gamejs, _modules, _utils) {
+	var angA = 10,
 		resistance = 0.75;
+
 	var Player = function(color) {
   		Player.superConstructor.apply(this, arguments);
-		this.rect = new gamejs.Rect([400, _modules.stageHeight - 10]); // (x, y) coordinates
+		this.rect = new gamejs.Rect([400, _modules.stageHeight - 10]); // (x, y) coordinates. Left = x center, top = y center
 		this.vel = [0, 0];
+		this.angVel = 0;
+		this.friction = 250;
 		this.direction = 0; // Direction player is trying to move
 		this.modifiers = {};
 		this.points = 0;
 		this.radius = 20;
+		this.mass = 1000;
 		this.color = color;
-		this.jumpModule = new _modules.GravityModule(this);
+		this.jumpModule = new _modules.JumpModule(this);
 		return this;
 	}
     gamejs.utils.objects.extend(Player, gamejs.sprite.Sprite);
@@ -41,36 +44,13 @@ define(["gamejs", "modules"], function(gamejs, _modules){
 
 	Player.prototype.update = function(ms) {
 		var that = this;
+
+		that.angVel += that.direction * 100 * ms / 1000;
 		that.jumpModule.update(ms);
 
-		var slowAmount = 1;
-		_.each(that.modifiers.slow, function(slow) {
-			slowAmount *= slow.amount;
-		})
-		if (!slowAmount) {
-			console.warn("Undefined slow amount - defaulting to 1");
-			slowAmount = 1;
-		}
-		that.vel[0] += acceleration * that.direction * slowAmount * ms / 1000;
-		if (that.vel[0] === 0) {
-			//pass
-		} else {
-			var dir = that.vel[0] > 0 ? 1 : -1;
-			var frictionApplied = this.jumpModule.inAir ? 0 : friction;
 
-			that.vel[0] -= (frictionApplied * dir + that.vel[0] * resistance) * ms / 1000; // Slow by amount that scales with current velocity
-			if (that.vel[0] * dir < 0) {
-				that.vel[0] = 0; // If vel is now in the other direction
-			}
-			that.rect.moveIp([that.vel[0] * ms / 1000, 0]);
-			if (that.rect.left < 0) {
-				that.rect.left = 0;
-				that.vel[0] *= -1;
-			} else if (that.rect.right > _modules.stageWidth) {
-				that.rect.right = _modules.stageWidth;
-				that.vel[0] *= -1;
-			}
-		}
+		that.rect.moveIp(_utils.multV(that.vel, ms/1000));
+
 
 		_.each(that.modifiers, function(modList, key) {
 			for (var i = 0; i < modList.length; i++) {
@@ -82,6 +62,7 @@ define(["gamejs", "modules"], function(gamejs, _modules){
 			})
 		});
 	};
+
 	var modId = 0; // Shared across all players
 	Player.prototype.addMod = function(type, mod) {
 		if (this.modifiers[type] === undefined) {
